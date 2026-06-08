@@ -1,5 +1,6 @@
 # Dependency directories
 node_modules/
+**/node_modules/
 jspm_packages/
 
 # Build outputs
@@ -23,6 +24,7 @@ Thumbs.db
 
 # Editor Files
 .vscode/
+!.vscode/extensions.json
 .idea/
 *.suo
 *.ntvs*
