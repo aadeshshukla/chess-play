@@ -105,6 +105,11 @@ export default function Game({ socket, roomId, initData, playerColor, onLeave })
   const [selectedSquare, setSelectedSquare] = useState(null)
   const [pendingPromotion, setPendingPromotion] = useState(null)
   const [boardOrientation, setBoardOrientation] = useState(playerColor || 'white')
+
+  // Sync board orientation whenever playerColor prop changes (covers rematch color swap)
+  useEffect(() => {
+    if (playerColor) setBoardOrientation(playerColor)
+  }, [playerColor])
   const [drawOfferedBy, setDrawOfferedBy] = useState(null)
   const [hasGameStarted, setHasGameStarted] = useState(false)
 
@@ -288,7 +293,7 @@ export default function Game({ socket, roomId, initData, playerColor, onLeave })
     }
   }, [game])
 
-  function attemptMove(from, to, promotion = 'q') {
+  function attemptMove(from, to, promotion = null) {
     if (gameOver || game.turn() !== playerColor[0]) return false
 
     const piece = game.get(from)
@@ -296,8 +301,8 @@ export default function Game({ socket, roomId, initData, playerColor, onLeave })
       piece.type === 'p' &&
       ((piece.color === 'w' && to[1] === '8') || (piece.color === 'b' && to[1] === '1'))
 
-    if (needsPromotion && !promotion) {
-      // Ask user
+    if (needsPromotion && promotion === null) {
+      // Ask user to pick promotion piece
       setPendingPromotion({ from, to })
       setOptionSquares({})
       setSelectedSquare(null)
@@ -437,9 +442,22 @@ export default function Game({ socket, roomId, initData, playerColor, onLeave })
     // Clear any previous selection UI
     setSelectedSquare(null)
 
-    const success = attemptMove(sourceSquare, targetSquare)
-    // If it was a promotion, we returned false and opened modal - piece will snap back until choice
-    return success
+    const piece = game.get(sourceSquare)
+    const isPromotion = piece &&
+      piece.type === 'p' &&
+      ((piece.color === 'w' && targetSquare[1] === '8') || (piece.color === 'b' && targetSquare[1] === '1'))
+
+    if (isPromotion) {
+      // Check it's actually a legal move before showing modal
+      const legalMoves = game.moves({ square: sourceSquare, verbose: true })
+      const isLegal = legalMoves.some(m => m.to === targetSquare)
+      if (!isLegal) return false
+      setPendingPromotion({ from: sourceSquare, to: targetSquare })
+      setOptionSquares({})
+      return false // snap back; confirmPromotion will execute the real move
+    }
+
+    return attemptMove(sourceSquare, targetSquare)
   }
 
   function onSquareRightClick() {
@@ -600,6 +618,12 @@ export default function Game({ socket, roomId, initData, playerColor, onLeave })
               onSquareRightClick={onSquareRightClick}
               boardOrientation={boardOrientation}
               boardWidth={boardWidth}
+              arePiecesDraggable={!gameOver}
+              isDraggablePiece={({ piece, sourceSquare }) => {
+                // Only allow dragging your own pieces on your turn
+                const colorChar = playerColor === 'white' ? 'w' : 'b'
+                return !gameOver && game.turn() === playerColor[0] && piece[0].toLowerCase() === colorChar
+              }}
               customDarkSquareStyle={{ backgroundColor: 'var(--board-dark)' }}
               customLightSquareStyle={{ backgroundColor: 'var(--board-light)' }}
               customSquareStyles={customSquareStyles}
